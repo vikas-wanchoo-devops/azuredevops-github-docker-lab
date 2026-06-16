@@ -1,0 +1,134 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  imageName: 'xoriant-demo-app'
+  imageTag: '$(Build.BuildId)'
+  feedName: 'xoriant-feed'
+  packageName: 'xoriant-app-package'
+  packageVersion: '1.0.$(Build.BuildId)'
+
+stages:
+- stage: Build
+  displayName: "Build Docker Image"
+  jobs:
+  - job: BuildDockerImage
+    displayName: "Build and Validate Docker Image"
+    steps:
+    - checkout: self
+
+    - script: |
+        echo "Listing repository files"
+        ls -la
+      displayName: "Validate repository structure"
+
+    - script: |
+        echo "Building Docker image"
+        docker build -t $(imageName):$(imageTag) .
+        docker images
+      displayName: "Build Docker image"
+
+    - script: |
+        echo "Running Docker container"
+        docker rm -f demo-container || true
+
+        docker run -d -p 5000:5000 --name demo-container $(imageName):$(imageTag)
+
+        echo "Waiting for application to start"
+        sleep 5
+
+        echo "Testing home endpoint"
+        curl -f http://localhost:5000
+
+        echo "Testing health endpoint"
+        curl -f http://localhost:5000/health
+
+        echo "Container logs"
+        docker logs demo-container
+
+        echo "Cleaning up container"
+        docker rm -f demo-container
+      displayName: "Run and test Docker container"
+
+    - script: |
+        echo "Saving Docker image as tar artifact"
+
+        mkdir -p $(Build.ArtifactStagingDirectory)/docker-image
+
+        docker save $(imageName):$(imageTag) \
+          -o $(Build.ArtifactStagingDirectory)/docker-image/$(imageName)-$(imageTag).tar
+
+        cat > $(Build.ArtifactStagingDirectory)/docker-image/build-info.txt <<EOF
+        Source of truth: GitHub
+        CI engine: Azure DevOps Pipelines
+        Image name: $(imageName)
+        Image tag: $(imageTag)
+        Build ID: $(Build.BuildId)
+        Commit: $(Build.SourceVersion)
+        Branch: $(Build.SourceBranch)
+        EOF
+
+        ls -lh $(Build.ArtifactStagingDirectory)/docker-image
+      displayName: "Save Docker image"
+
+    - publish: $(Build.ArtifactStagingDirectory)/docker-image
+      artifact: docker-image
+      displayName: "Publish Docker image pipeline artifact"
+
+- stage: PublishToArtifacts
+  displayName: "Publish to Azure Artifacts"
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+
+  jobs:
+  - job: PublishUniversalPackage
+    displayName: "Publish Universal Package"
+    steps:
+    - checkout: self
+
+    - download: current
+      artifact: docker-image
+      displayName: "Download Docker image artifact"
+
+    - script: |
+        echo "Preparing Azure Artifacts package content"
+
+        mkdir -p $(Build.ArtifactStagingDirectory)/app-package
+        mkdir -p $(Build.ArtifactStagingDirectory)/app-package/source
+        mkdir -p $(Build.ArtifactStagingDirectory)/app-package/docker-image
+
+        echo "Copying source files"
+
+        cp app.py $(Build.ArtifactStagingDirectory)/app-package/source/
+        cp requirements.txt $(Build.ArtifactStagingDirectory)/app-package/source/
+        cp Dockerfile $(Build.ArtifactStagingDirectory)/app-package/source/
+        cp README.md $(Build.ArtifactStagingDirectory)/app-package/source/
+
+        echo "Copying Docker image tar"
+        cp -r $(Pipeline.Workspace)/docker-image/* $(Build.ArtifactStagingDirectory)/app-package/docker-image/
+
+        echo "Final package content"
+        ls -R $(Build.ArtifactStagingDirectory)/app-package
+      displayName: "Prepare package content"
+
+    - task: UniversalPackages@0
+      displayName: "Publish package to Azure Artifacts feed"
+      inputs:
+        command: publish
+        publishDirectory: '$(Build.ArtifactStagingDirectory)/app-package'
+        feedsToUsePublish: 'internal'
+        vstsFeedPublish: '$(feedName)'
+        vstsFeedPackagePublish: '$(packageName)'
+        versionOption: custom
+        versionPublish: '$(packageVersion)'
+        packagePublishDescription: 'Flask Docker application package published from GitHub source repo using Azure DevOps Pipeline'
