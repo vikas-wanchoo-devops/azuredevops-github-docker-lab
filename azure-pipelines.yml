@@ -3,10 +3,7 @@ trigger:
     include:
       - main
 
-pr:
-  branches:
-    include:
-      - main
+pr: none
 
 pool:
   vmImage: ubuntu-latest
@@ -88,42 +85,47 @@ stages:
   condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
 
   jobs:
-  - job: PublishUniversalPackage
-    displayName: "Publish Universal Package"
-    steps:
-    - checkout: self
+  - deployment: PublishUniversalPackage
+    displayName: "Publish Universal Package with Approval"
+    environment: 'dev'
 
-    - download: current
-      artifact: docker-image
-      displayName: "Download Docker image artifact"
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
 
-    - script: |
-        echo "Preparing Azure Artifacts package content"
+          - download: current
+            artifact: docker-image
+            displayName: "Download Docker image artifact"
 
-        mkdir -p $(Build.ArtifactStagingDirectory)/app-package/source
-        mkdir -p $(Build.ArtifactStagingDirectory)/app-package/docker-image
+          - script: |
+              echo "Preparing Azure Artifacts package content"
 
-        echo "Copying source files"
-        cp app.py $(Build.ArtifactStagingDirectory)/app-package/source/
-        cp requirements.txt $(Build.ArtifactStagingDirectory)/app-package/source/
-        cp Dockerfile $(Build.ArtifactStagingDirectory)/app-package/source/
-        cp README.md $(Build.ArtifactStagingDirectory)/app-package/source/
+              mkdir -p $(Build.ArtifactStagingDirectory)/app-package/source
+              mkdir -p $(Build.ArtifactStagingDirectory)/app-package/docker-image
 
-        echo "Copying Docker image tar"
-        cp -r $(Pipeline.Workspace)/docker-image/* $(Build.ArtifactStagingDirectory)/app-package/docker-image/
+              echo "Copying source files"
+              cp app.py $(Build.ArtifactStagingDirectory)/app-package/source/
+              cp requirements.txt $(Build.ArtifactStagingDirectory)/app-package/source/
+              cp Dockerfile $(Build.ArtifactStagingDirectory)/app-package/source/
+              cp README.md $(Build.ArtifactStagingDirectory)/app-package/source/
 
-        echo "Final package content"
-        ls -R $(Build.ArtifactStagingDirectory)/app-package
-      displayName: "Prepare package content"
+              echo "Copying Docker image tar"
+              cp -r $(Pipeline.Workspace)/docker-image/* $(Build.ArtifactStagingDirectory)/app-package/docker-image/
 
-    - task: UniversalPackages@0
-      displayName: "Publish package to Azure Artifacts feed"
-      inputs:
-        command: 'publish'
-        publishDirectory: '$(Build.ArtifactStagingDirectory)/app-package'
-        feedsToUsePublish: 'internal'
-        vstsFeedPublish: '$(feedName)'
-        vstsFeedPackagePublish: '$(packageName)'
-        versionOption: 'custom'
-        versionPublish: '$(packageVersion)'
-        packagePublishDescription: 'Flask Docker application package published from GitHub source repo using Azure DevOps Pipeline'
+              echo "Final package content"
+              ls -R $(Build.ArtifactStagingDirectory)/app-package
+            displayName: "Prepare package content"
+
+          - task: UniversalPackages@0
+            displayName: "Publish package to Azure Artifacts feed"
+            inputs:
+              command: 'publish'
+              publishDirectory: '$(Build.ArtifactStagingDirectory)/app-package'
+              feedsToUsePublish: 'internal'
+              vstsFeedPublish: '$(feedName)'
+              vstsFeedPackagePublish: '$(packageName)'
+              versionOption: 'custom'
+              versionPublish: '$(packageVersion)'
+              packagePublishDescription: 'Flask Docker application package published from GitHub source repo using Azure DevOps Pipeline'
