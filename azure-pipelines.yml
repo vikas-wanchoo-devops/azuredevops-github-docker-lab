@@ -15,7 +15,7 @@ variables:
   imageName: 'xoriant-demo-app'
   imageTag: '$(Build.BuildId)'
   feedName: 'azure-devops-lab/xoriant-feed'
-  packageName: 'xoriant-app-package'
+  packageName: 'github-source-app-package'
   packageVersion: '1.0.$(Build.BuildId)'
 
 stages:
