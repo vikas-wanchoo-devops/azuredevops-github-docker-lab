@@ -9,11 +9,13 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
-  imageName: 'xoriant-demo-app'
-  imageTag: '$(Build.BuildId)'
-  feedName: 'azure-devops-lab/xoriant-feed'
-  packageName: 'github-source-app-package'
-  packageVersion: '1.0.$(Build.BuildId)'
+- group: vg-github-docker-dev
+
+- name: imageTag
+  value: '$(Build.BuildId)'
+
+- name: packageVersion
+  value: '1.0.$(Build.BuildId)'
 
 stages:
 - stage: Build
