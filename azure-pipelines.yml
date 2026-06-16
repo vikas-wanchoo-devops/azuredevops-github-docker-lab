@@ -20,7 +20,7 @@ stages:
   displayName: "Build Docker Image"
   jobs:
   - job: BuildDockerImage
-    displayName: "Build and Validate Docker Image"
+    displayName: "Build, Test and Validate Docker Image"
     steps:
     - checkout: self
 
@@ -28,6 +28,29 @@ stages:
         echo "Listing repository files"
         ls -la
       displayName: "Validate repository structure"
+
+    - task: UsePythonVersion@0
+      displayName: "Use Python 3.11"
+      inputs:
+        versionSpec: '3.11'
+
+    - script: |
+        echo "Installing Python dependencies"
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+        echo "Running pytest unit tests"
+        pytest -q --junitxml=test-results.xml
+      displayName: "Run pytest unit tests"
+
+    - task: PublishTestResults@2
+      displayName: "Publish pytest test results"
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: 'test-results.xml'
+        testRunTitle: 'Flask App Unit Tests'
+        failTaskOnFailedTests: true
+      condition: succeededOrFailed()
 
     - script: |
         echo "Building Docker image"
@@ -107,6 +130,7 @@ stages:
 
               echo "Copying source files"
               cp app.py $(Build.ArtifactStagingDirectory)/app-package/source/
+              cp test_app.py $(Build.ArtifactStagingDirectory)/app-package/source/
               cp requirements.txt $(Build.ArtifactStagingDirectory)/app-package/source/
               cp Dockerfile $(Build.ArtifactStagingDirectory)/app-package/source/
               cp README.md $(Build.ArtifactStagingDirectory)/app-package/source/
