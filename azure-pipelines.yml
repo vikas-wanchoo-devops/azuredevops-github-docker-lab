@@ -1,3 +1,84 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  imageName: 'xoriant-demo-app'
+  imageTag: '$(Build.BuildId)'
+  feedName: 'azure-devops-lab/xoriant-feed'
+  packageName: 'github-source-app-package'
+  packageVersion: '1.0.$(Build.BuildId)'
+
+stages:
+- stage: Build
+  displayName: "Build Docker Image"
+  jobs:
+  - job: BuildDockerImage
+    displayName: "Build and Validate Docker Image"
+    steps:
+    - checkout: self
+
+    - script: |
+        echo "Listing repository files"
+        ls -la
+      displayName: "Validate repository structure"
+
+    - script: |
+        echo "Building Docker image"
+        docker build -t $(imageName):$(imageTag) .
+        docker images
+      displayName: "Build Docker image"
+
+    - script: |
+        echo "Running Docker container"
+        docker rm -f demo-container || true
+
+        docker run -d -p 5000:5000 --name demo-container $(imageName):$(imageTag)
+
+        echo "Waiting for application to start"
+        sleep 5
+
+        echo "Testing home endpoint"
+        curl -f http://localhost:5000
+
+        echo "Testing health endpoint"
+        curl -f http://localhost:5000/health
+
+        echo "Container logs"
+        docker logs demo-container
+
+        echo "Cleaning up container"
+        docker rm -f demo-container
+      displayName: "Run and test Docker container"
+
+    - script: |
+        echo "Saving Docker image as tar artifact"
+
+        mkdir -p $(Build.ArtifactStagingDirectory)/docker-image
+
+        docker save $(imageName):$(imageTag) -o $(Build.ArtifactStagingDirectory)/docker-image/$(imageName)-$(imageTag).tar
+
+        printf "Source of truth: GitHub\n" > $(Build.ArtifactStagingDirectory)/docker-image/build-info.txt
+        printf "CI engine: Azure DevOps Pipelines\n" >> $(Build.ArtifactStagingDirectory)/docker-image/build-info.txt
+        printf "Image name: $(imageName)\n" >> $(Build.ArtifactStagingDirectory)/docker-image/build-info.txt
+        printf "Image tag: $(imageTag)\n" >> $(Build.ArtifactStagingDirectory)/docker-image/build-info.txt
+        printf "Build ID: $(Build.BuildId)\n" >> $(Build.ArtifactStagingDirectory)/docker-image/build-info.txt
+        printf "Commit: $(Build.SourceVersion)\n" >> $(Build.ArtifactStagingDirectory)/docker-image/build-info.txt
+        printf "Branch: $(Build.SourceBranch)\n" >> $(Build.ArtifactStagingDirectory)/docker-image/build-info.txt
+
+        ls -lh $(Build.ArtifactStagingDirectory)/docker-image
+      displayName: "Save Docker image"
+
+    - publish: $(Build.ArtifactStagingDirectory)/docker-image
+      artifact: docker-image
+      displayName: "Publish Docker image pipeline artifact"
+
 - stage: PublishToArtifacts
   displayName: "Publish to Azure Artifacts"
   dependsOn: Build
