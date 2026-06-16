@@ -1,1 +1,1 @@
-# azuredevops-github-docker-lab
+cp README.md $(Build.ArtifactStagingDirectory)/app-package/source/
