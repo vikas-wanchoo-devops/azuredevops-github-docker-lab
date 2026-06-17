@@ -27,6 +27,20 @@ stages:
     - checkout: self
 
     - script: |
+        echo "Testing secret variable masking"
+
+        echo "Secret direct value is: $DEMO_SECRET"
+        echo "Secret inside sentence: password=$DEMO_SECRET"
+
+        echo "Partial secret text test:"
+        echo "logical-api"
+
+        echo "Secret masking test completed"
+      displayName: "Check secret variable masking"
+      env:
+        DEMO_SECRET: $(DEMO_SECRET)
+
+    - script: |
         echo "Listing repository files"
         ls -la
       displayName: "Validate repository structure"
