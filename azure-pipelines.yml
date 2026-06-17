@@ -10,6 +10,7 @@ pool:
 
 variables:
 - group: vg-github-docker-dev
+- group: vg-keyvault-dev
 
 - name: imageTag
   value: '$(Build.BuildId)'
@@ -25,6 +26,19 @@ stages:
     displayName: "Build, Test and Validate Docker Image"
     steps:
     - checkout: self
+
+    - script: |
+        echo "Validating Key Vault secret access"
+
+        if [ -z "$DEMO_APP_API_KEY" ]; then
+          echo "Key Vault secret was not loaded"
+          exit 1
+        fi
+
+        echo "Key Vault secret loaded successfully"
+      displayName: "Validate Key Vault secret access"
+      env:
+        DEMO_APP_API_KEY: $(DEMO-APP-API-KEY)
 
     - script: |
         echo "Listing repository files"
